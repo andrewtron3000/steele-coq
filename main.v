@@ -1,6 +1,7 @@
 
-(* this is a treatment of the water holding histogram problem found in
+(* 
 
+this is a treatment of the water holding histogram problem found in
 https://www.youtube.com/watch?v=ftcIcn8AmSY
 
  *)
@@ -8,7 +9,6 @@ https://www.youtube.com/watch?v=ftcIcn8AmSY
 Require Import Coq.Arith.Arith.
 Require Import Coq.Bool.Bool.
 Require Import Coq.Strings.String.
-
 Require Import Nat.
 Require Import List.
 Import ListNotations.
@@ -22,6 +22,7 @@ Definition max_nat (x1 x2 : nat) : nat :=
 Definition min_nat (x1 x2 : nat) : nat :=
   if (leb x1 x2) then x1 else x2.
 
+(* define a low level utility function for the left to right sweep *)
 Fixpoint left_to_right_sweep' (max : nat) (h : histogram) : list nat :=
   match h with
   | [] => []
@@ -30,18 +31,18 @@ Fixpoint left_to_right_sweep' (max : nat) (h : histogram) : list nat :=
 
 (* define the left to right sweep function that returns, for each
 element of the histogram the highest bar starting from the left. *)
-Fixpoint left_to_right_sweep (h : histogram) : list nat :=
+Definition left_to_right_sweep (h : histogram) : list nat :=
   left_to_right_sweep' 0 h.
-
-Compute left_to_right_sweep [1 ; 2; 1; 4; 2; 1].
 
 (* define the right to left sweep function that returns, for each
 element of the histogram the highest bar starting from the right *)
-Fixpoint right_to_left_sweep (h : histogram) : list nat :=
+Definition right_to_left_sweep (h : histogram) : list nat :=
   rev (left_to_right_sweep (rev h)).
 
+Compute left_to_right_sweep [1 ; 2; 1; 4; 2; 1].
 Compute right_to_left_sweep [1 ; 2; 1; 4; 2; 1].
 
+(* Next, define some utility functions like zip *)
 Fixpoint zip (l1 l2 : list nat) : list (nat * nat) :=
   match l1 with
   | [] => []
@@ -53,6 +54,8 @@ Fixpoint zip (l1 l2 : list nat) : list (nat * nat) :=
 
 Compute (zip [1; 2; 3; 4] [5; 6; 7; 8]).
 
+(* define a low level utility function useful for computing the water
+level *)
 Fixpoint water_level' (levels : list (nat * nat)) : list nat :=
   match levels with
   | [] => []
@@ -60,7 +63,7 @@ Fixpoint water_level' (levels : list (nat * nat)) : list nat :=
   end.
 
 (* now compute the water level *)
-Fixpoint water_level (h : histogram) : list nat :=
+Definition water_level (h : histogram) : list nat :=
   let lr := left_to_right_sweep h in
   let rr := right_to_left_sweep h in
   let lrs := zip lr rr in
@@ -69,36 +72,29 @@ Fixpoint water_level (h : histogram) : list nat :=
 (* Here is the example from the youtube video *)
 Definition example := [2;6;3;5;2;8;1;4;2;2;5;3;5;7;4;1].
 
-Compute water_level example.
-
+(* for a particular bar and water level, how much water is there *)
 Definition how_much_water (bar_and_water : (nat * nat)) : nat :=
   match bar_and_water with
   | (bar, water) => if (leb bar water) then water - bar else 0
   end.
 
-Fixpoint map (f : nat*nat -> nat) (ls : list (nat * nat)) : list nat :=
-  match ls with
-  | [] => []
-  | x :: xs => (f x) :: map f xs
-  end.
-
-Fixpoint sum (ls : list nat) : nat :=
-  match ls with
-  | [] => 0
-  | x :: xs => x + sum(xs)
-  end.
-
+(* This function computes the total amount of water carried by a
+histogram by just computing the amount of water carried by each bar.
+*)
 Definition amount_of_water (bars : histogram) : nat :=
   let water := water_level bars in
   let bars_and_water := zip bars water in
-  sum (map how_much_water bars_and_water).
+  fold_left add (map how_much_water bars_and_water) 0.
 
+(* This should evaluate to 35. *)
 Compute amount_of_water example.
 
-(* Ok, now we'll work on the bitonic data structure representation *)
+(* Ok, now we'll work on the bitonic data structure representation.
+This is the second development in the talk. *)
 
 Definition height_width_list := list (nat * nat).
 
+(* Define the glob data structure as in the video *)
 Record glob : Set := mkGlob {
                          left : height_width_list;
                          h : nat;
@@ -111,27 +107,32 @@ Definition initial_glob := mkGlob [] 0 0 [] 0.
 Definition make_singleton_glob (h : nat) : glob :=
   mkGlob [] h 1 [] 0.
 
+(* The width function calculates the width of a list of height width
+pairs.  This is on the slide of utility functions. *)
 Fixpoint width (hw : height_width_list) : nat :=
   match hw with
   | [] => 0
   | (h, w) :: xs => w + (width xs)
   end.
 
+(* The fill function computes how much water can be held at a
+particular water height for a set of height width pairs. *)
 Fixpoint fill (hw : height_width_list) (water_height : nat) : nat :=
   match hw with
   | [] => 0
   | (h, w) :: xs => (w * (water_height - h)) + (fill xs water_height)
   end.
 
-Search Nat.leb.
-
+(* The function half is the "split" function that will divide a list
+of height width pairs into two lists. *)
 Definition half (l : height_width_list) : (height_width_list * height_width_list) :=
   let n := length l in
   (firstn (n / 2) l, skipn (n / 2) l).
 
 Compute half [ (0, 1) ; (2, 3) ; (4, 5) ; (6, 7) ].
 
-(* OK, now we are going to implement the three way split *)
+(* OK, now we are going to implement the three way split.  This is
+defined in the video. *)
 Fixpoint three_way_split (gas : nat) (x : height_width_list) (m : nat) : (height_width_list * option nat * height_width_list) :=
   match gas with
   | 0 => ([], None, [])
@@ -153,6 +154,7 @@ Fixpoint three_way_split (gas : nat) (x : height_width_list) (m : nat) : (height
            end
   end.
 
+(* Next we define the oplus operator from the video. *)
 Definition oplus (gas : nat) (x y : glob) : glob :=
   if (Nat.ltb (h x) (h y))
   then let '(lss, eql, gtr) := three_way_split gas (left y) (h x) in
@@ -177,31 +179,25 @@ Definition oplus (gas : nat) (x y : glob) : glob :=
                    (right y)
                    ( (water x) + (fill (right x) (h x)) + (fill (left y) (h x)) + (water y) ).
 
-
+(* And we define a notation for oplus *)
 Notation "x @ y" :=
   (oplus 1000 x y)
     (at level 50,
      left associativity).
 
-(*
-Notation "x # y" :=
-  (oplus_debug 1000 x y)
-    (at level 50,
-     left associativity).
- *)
-
-(* Now let's do some testing of the oplus *)
-
-(* First we need to generate all of the initial globs *)
+(* Now let's do some testing of the oplus.  First we need to generate
+all of the initial globs *)
 
 Definition globs_start (w : list nat) : list glob :=
   List.map make_singleton_glob w.
 
+(* Create the starting list of singleton globs from the example from the video *)
 Definition start : list glob :=
   globs_start example.
 
 Compute start.
 
+(* Now, for testing, break out every glob *)
 Definition x1 : glob := List.hd initial_glob start.
 Definition x2 : glob := List.nth 1 start initial_glob.
 Definition x3 : glob := List.nth 2 start initial_glob.
@@ -219,15 +215,44 @@ Definition x14 : glob := List.nth 13 start initial_glob.
 Definition x15 : glob := List.nth 14 start initial_glob.
 Definition x16 : glob := List.nth 15 start initial_glob.
 
-Compute (x1, x2).
-
+(* Now do some simple tests of the oplus operator *)
 Compute (x1 @ x2).
-
 Compute (x1 @ x2 @ x3 @ x4 @ x5).
-
-(* = {| left := [(2, 1)]; h := 6; w := 1; 
-        right := [(2, 1); (5, 2)]; water := 2 |}
-     : glob *)
-
 Compute (x1 @ x2 @ x3 @ x4 @ x5 @ x6 @ x7 @ x8 @
          x9 @ x10 @ x11 @ x12 @ x13 @ x14 @ x15 @ x16).
+
+(* Now testing the three-case bitonic glob slide.  Here is test #1. *)
+Definition one_l : glob :=
+  (make_singleton_glob 1) @ (make_singleton_glob 3) @ (make_singleton_glob 4) @ (make_singleton_glob 2).
+ 
+Definition one_r : glob :=
+  (make_singleton_glob 1) @ (make_singleton_glob 2) @ (make_singleton_glob 3) @ (make_singleton_glob 2).
+
+Compute (one_l @ one_r).
+
+(* Here is test #2 of the oplus operator *)
+Definition two_l : glob :=
+  (make_singleton_glob 1) @ (make_singleton_glob 2) @ (make_singleton_glob 3) @ (make_singleton_glob 2).
+ 
+Definition two_r : glob :=
+  (make_singleton_glob 1) @ (make_singleton_glob 4) @ (make_singleton_glob 5) @ (make_singleton_glob 2).
+
+Compute (two_l @ two_r).
+
+(* Here is test #3 of the oplus operator *)
+Definition three_l : glob :=
+  (make_singleton_glob 1) @ (make_singleton_glob 2) @ (make_singleton_glob 3) @ (make_singleton_glob 2).
+ 
+Definition three_r : glob :=
+  (make_singleton_glob 1) @ (make_singleton_glob 2) @ (make_singleton_glob 3) @ (make_singleton_glob 2).
+
+Compute (three_l @ three_r).
+
+(* OK, it looks like the glob stuff is working *)
+
+(* Now let's try asking if the oplus operator is associative *)
+Theorem oplus_assoc : forall (x y z : glob),
+    x @ (y @ z) = (x @ y) @ z.
+Proof.
+  Admitted.
+
