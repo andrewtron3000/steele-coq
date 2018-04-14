@@ -95,6 +95,26 @@ This is the second development in the talk. *)
 
 Definition height_width_list := list (nat * nat).
 
+Fixpoint hw_list_eq (x y : height_width_list) : bool :=
+  let lx := List.length x in
+  let ly := List.length y in
+  if (beq_nat lx ly)
+  then match x with
+       | (x1, x2) :: xs =>
+         match y with
+         | (y1, y2) :: ys => if (andb (beq_nat x1 y1) (beq_nat x2 y2)) 
+                             then hw_list_eq xs ys
+                             else false
+         | [] => true
+         end
+       | [] => true
+       end
+  else false.
+
+Compute hw_list_eq [(1, 2) ; (3, 4)] [(1, 2) ; (3, 4)].
+Compute hw_list_eq [(1, 4) ; (3, 4)] [(1, 2) ; (3, 4)].
+Compute hw_list_eq [(1, 2) ; (3, 4) ; (5, 6)] [(1, 2) ; (3, 4)].
+
 (* Define the glob data structure as in the video *)
 Record glob : Set := mkGlob {
                          left : height_width_list;
