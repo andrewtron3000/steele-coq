@@ -277,3 +277,82 @@ Theorem oplus_assoc : forall (x y z : glob),
 Proof.
   Admitted.
 
+(* Now, let's work on the quickchick support *)
+
+Set Warnings "-extraction-opaque-accessed,-extraction".
+Set Warnings "-notation-overridden,-parsing".
+
+From QuickChick Require Import QuickChick.
+
+(* Do a quickchick that the simple sequential solution returns the
+same amount of water as the oplus version. *)
+
+Definition oplus_water (h : histogram) : nat :=
+  let gs := globs_start h in
+  let final := List.fold_left (oplus 1000) gs initial_glob in
+  water final.
+
+Definition equiv_solutions_p (h : histogram) : bool :=
+  beq_nat (amount_of_water h) (oplus_water h).
+
+QuickChick
+  (forAll (vectorOf 32 (choose (0, 20))) equiv_solutions_p).
+
+(* Now we know the oplus and simple sequential versions return
+the same value. *)
+
+(* Let's test the oplus to see if it associative *)
+
+Definition glob_eq (x y : glob) : bool :=
+  match x with
+  | {| left := xleft; h := xh; w := xw; right := xright; water := xwater |} =>
+    match y with
+    | {| left := yleft; h := yh; w := yw; right := yright; water := ywater |} =>
+      List.fold_left (andb) [ (hw_list_eq xleft yleft) ;
+                                (beq_nat xh yh) ;
+                                (beq_nat xw yw) ;
+                                (hw_list_eq xright yright) ;
+                                (beq_nat xwater ywater) ] true
+    end
+  end.
+
+Definition oplus_assoc_p (globs : (glob * glob * glob)) : bool :=
+  match globs with
+  | (x, y, z) =>
+    glob_eq (x @ (y @ z)) ((x @ y) @ z)
+  end.
+
+(* First, let's define useful generators.  This generator returns a
+list of singleton globs *)
+Definition genStartState : G (list glob) :=
+  bindGen (vectorOf 8 (choose (0, 20)))
+          (fun xs => returnGen (globs_start xs)).
+
+(* This generator creates a glob *)
+Definition genGlob : G glob :=
+  bindGen genStartState
+          (fun start => returnGen (fold_left (oplus 1000) start initial_glob)).
+
+(* Now I want to derive a show function for globs *)
+Derive Show for glob.
+Print showglob.
+
+(* TODO: work on shrinkers *)
+
+
+(* OK, let's put together a check. *)
+QuickChick
+  (forAll
+     (bindGen genGlob
+              (fun x =>
+                 bindGen genGlob
+                         (fun y =>
+                            bindGen genGlob (fun z => returnGen (x, y, z))))) oplus_assoc_p).
+
+(* OK, now I have quickchicked two properties.  The first is that the
+simple sequential version returns the same value as the oplus.  The
+second is that oplus is associative. So I think it is OK to start
+trying to prove that the oplus operator is associative.  *)
+
+
+
