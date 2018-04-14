@@ -11,6 +11,7 @@ Require Import Coq.Bool.Bool.
 Require Import Coq.Strings.String.
 Require Import Nat.
 Require Import List.
+
 Import ListNotations.
 
 (* Let's first define the type of our histogram *)
