@@ -209,7 +209,7 @@ Notation "x @ y" :=
 (* Now let's do some testing of the oplus.  First we need to generate
 all of the initial globs *)
 
-Definition globs_start (w : list nat) : list glob :=
+Definition globs_start (w : histogram) : list glob :=
   List.map make_singleton_glob w.
 
 (* Create the starting list of singleton globs from the example from the video *)
