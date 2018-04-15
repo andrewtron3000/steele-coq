@@ -11,6 +11,7 @@ Require Import Coq.Bool.Bool.
 Require Import Coq.Strings.String.
 Require Import Nat.
 Require Import List.
+
 Import ListNotations.
 
 (* Let's first define the type of our histogram *)
@@ -93,6 +94,26 @@ Compute amount_of_water example.
 This is the second development in the talk. *)
 
 Definition height_width_list := list (nat * nat).
+
+Fixpoint hw_list_eq (x y : height_width_list) : bool :=
+  let lx := List.length x in
+  let ly := List.length y in
+  if (beq_nat lx ly)
+  then match x with
+       | (x1, x2) :: xs =>
+         match y with
+         | (y1, y2) :: ys => if (andb (beq_nat x1 y1) (beq_nat x2 y2)) 
+                             then hw_list_eq xs ys
+                             else false
+         | [] => true
+         end
+       | [] => true
+       end
+  else false.
+
+Compute hw_list_eq [(1, 2) ; (3, 4)] [(1, 2) ; (3, 4)].
+Compute hw_list_eq [(1, 4) ; (3, 4)] [(1, 2) ; (3, 4)].
+Compute hw_list_eq [(1, 2) ; (3, 4) ; (5, 6)] [(1, 2) ; (3, 4)].
 
 (* Define the glob data structure as in the video *)
 Record glob : Set := mkGlob {
@@ -188,7 +209,7 @@ Notation "x @ y" :=
 (* Now let's do some testing of the oplus.  First we need to generate
 all of the initial globs *)
 
-Definition globs_start (w : list nat) : list glob :=
+Definition globs_start (w : histogram) : list glob :=
   List.map make_singleton_glob w.
 
 (* Create the starting list of singleton globs from the example from the video *)
@@ -255,4 +276,83 @@ Theorem oplus_assoc : forall (x y z : glob),
     x @ (y @ z) = (x @ y) @ z.
 Proof.
   Admitted.
+
+(* Now, let's work on the quickchick support *)
+
+Set Warnings "-extraction-opaque-accessed,-extraction".
+Set Warnings "-notation-overridden,-parsing".
+
+From QuickChick Require Import QuickChick.
+
+(* Do a quickchick that the simple sequential solution returns the
+same amount of water as the oplus version. *)
+
+Definition oplus_water (h : histogram) : nat :=
+  let gs := globs_start h in
+  let final := List.fold_left (oplus 1000) gs initial_glob in
+  water final.
+
+Definition equiv_solutions_p (h : histogram) : bool :=
+  beq_nat (amount_of_water h) (oplus_water h).
+
+QuickChick
+  (forAll (vectorOf 32 (choose (0, 20))) equiv_solutions_p).
+
+(* Now we know the oplus and simple sequential versions return
+the same value. *)
+
+(* Let's test the oplus to see if it associative *)
+
+Definition glob_eq (x y : glob) : bool :=
+  match x with
+  | {| left := xleft; h := xh; w := xw; right := xright; water := xwater |} =>
+    match y with
+    | {| left := yleft; h := yh; w := yw; right := yright; water := ywater |} =>
+      List.fold_left (andb) [ (hw_list_eq xleft yleft) ;
+                                (beq_nat xh yh) ;
+                                (beq_nat xw yw) ;
+                                (hw_list_eq xright yright) ;
+                                (beq_nat xwater ywater) ] true
+    end
+  end.
+
+Definition oplus_assoc_p (globs : (glob * glob * glob)) : bool :=
+  match globs with
+  | (x, y, z) =>
+    glob_eq (x @ (y @ z)) ((x @ y) @ z)
+  end.
+
+(* First, let's define useful generators.  This generator returns a
+list of singleton globs *)
+Definition genStartState : G (list glob) :=
+  bindGen (vectorOf 8 (choose (0, 20)))
+          (fun xs => returnGen (globs_start xs)).
+
+(* This generator creates a glob *)
+Definition genGlob : G glob :=
+  bindGen genStartState
+          (fun start => returnGen (fold_left (oplus 1000) start initial_glob)).
+
+(* Now I want to derive a show function for globs *)
+Derive Show for glob.
+Print showglob.
+
+(* TODO: work on shrinkers *)
+
+
+(* OK, let's put together a check. *)
+QuickChick
+  (forAll
+     (bindGen genGlob
+              (fun x =>
+                 bindGen genGlob
+                         (fun y =>
+                            bindGen genGlob (fun z => returnGen (x, y, z))))) oplus_assoc_p).
+
+(* OK, now I have quickchicked two properties.  The first is that the
+simple sequential version returns the same value as the oplus.  The
+second is that oplus is associative. So I think it is OK to start
+trying to prove that the oplus operator is associative.  *)
+
+
 
